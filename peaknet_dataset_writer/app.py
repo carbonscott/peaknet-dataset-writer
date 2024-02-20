@@ -20,7 +20,7 @@ from typing import List
 
 @ray.remote
 def process_sub_event(patch, max_nfev = 2000):
-    fitting_result = PeakFitter.fit(patch, max_nfev = max_nfev)    # Return a Ray ObjectRef to the future result
+    fitting_result = PeakFitter.fit(patch, max_nfev = max_nfev)
 
     # [[[ Produce a label ]]]
     # Obtain the model profile...
