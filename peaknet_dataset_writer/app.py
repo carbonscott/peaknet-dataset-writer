@@ -18,6 +18,8 @@ from bragg_peak_fitter.modeling.pseudo_voigt2d import PseudoVoigt2D
 from dataclasses import dataclass
 from typing import List
 
+from .h5writer import write_results_to_h5
+
 @ray.remote
 def process_sub_event(patch, max_nfev = 2000):
     fitting_result = PeakFitter.fit(patch, max_nfev = max_nfev)
@@ -49,27 +51,31 @@ def process_sub_event(patch, max_nfev = 2000):
 def process_event_batch(batch_idx, event_batch, shared_data_ref):
     '''
     Each event corresponds to a frame idx.
+
+    shared_data_ref is a top-level object ref, so ray will auto de-reference it.
     '''
     # Unpack the shared data...
-    ## shared_data     = ray.get(shared_data_ref)
+    identifier      = shared_data_ref['identifier'     ]
     basename_h5     = shared_data_ref['basename_h5'    ]
     dir_h5          = shared_data_ref['dir_h5'         ]
     max_nfev        = shared_data_ref['max_nfev'       ]
     sigma_cut       = shared_data_ref['sigma_cut'      ]
+    redchi_cut      = shared_data_ref['redchi_cut'     ]
     win_size        = shared_data_ref['win_size'       ]
     stream_peakdiff = shared_data_ref['stream_peakdiff']
 
     results = []
     for event in event_batch:
+        # [[[ LABELING ]]]
         # Obtain img and peaks...
-        frame_idx = event
-        img       = get_img(frame_idx, stream_peakdiff)
-        peaks     = get_good_predicted_peaks(frame_idx, stream_peakdiff, sigma_cut = sigma_cut)
+        frame_idx             = event
+        img                   = get_img(frame_idx, stream_peakdiff)
+        good_peaks, bad_peaks = split_peaks_by_sigma(frame_idx, stream_peakdiff, sigma_cut = sigma_cut)
 
         # Get a patch list for this event...
-        peaks      = np.array(peaks)
-        peaks_y    = peaks[:, 0]
-        peaks_x    = peaks[:, 1]
+        good_peaks = np.array(good_peaks)
+        peaks_y    = good_peaks[:, 0]
+        peaks_x    = good_peaks[:, 1]
         patch_list = get_patch_list(peaks_y, peaks_x, img, win_size)
 
         # Submit sub-events (peak fitting)...
@@ -87,10 +93,33 @@ def process_event_batch(batch_idx, event_batch, shared_data_ref):
         for mask_label, mask_patch in zip(mask_label_sub_events, mask_patch_list):
             mask_patch[:] = mask_label[:]
 
-        # Aggregate results for this event
+        # [[[ AGGREGATE INFORMATION FOR EXPORT ]]]
+        # Find out bad fit...
+        bad_fit_context_list      = []
+        bad_fit_init_values_list  = []
+        bad_fit_final_values_list = []
+        bad_fit_idx_list          = [ idx for idx, result in enumerate(fitting_result_sub_events) if result.redchi > redchi_cut ]
+        for i in bad_fit_idx_list:
+            context      = (peaks_y[i], peaks_x[i], win_size)
+            init_values  = fitting_result_sub_events[i].init_values
+            final_values = fitting_result_sub_events[i].params.valuesdict()
+
+            bad_fit_context_list.append(context)
+            bad_fit_init_values_list.append(init_values)
+            bad_fit_final_values_list.append(final_values)
+
+        # Aggregate information for this event for exporting...
         event_result = {
-            'image' : img,
-            'mask'  : mask,
+            'identifier'                : identifier,
+            'image'                     : img,
+            'mask'                      : mask,
+            'good_peaks'                : good_peaks,
+            'bad_peaks'                 : bad_peaks,
+            'detector'                  : get_detector_info(frame_idx, stream_peakdiff),
+            'crystals'                  : get_crystal_info(frame_idx, stream_peakdiff),
+            'bad_fit_context_list'      : bad_fit_context_list,
+            'bad_fit_init_values_list'  : bad_fit_init_values_list,
+            'bad_fit_final_values_list' : bad_fit_final_values_list,
         }
         results.append(event_result)
 
@@ -102,61 +131,49 @@ def process_event_batch(batch_idx, event_batch, shared_data_ref):
     return batch_idx
 
 
-def write_results_to_h5(path_h5, results):
-    '''
-    results:
-        [(img, mask, bbox, metadata),
-         (img, mask, bbox, metadata),
-         ...
-        ]
-    '''
-    with h5py.File(path_h5, 'w') as f:
-        for enum_idx, result in enumerate(results):
-            image = result['image']
-            mask  = result['mask' ]
-
-            # Create a subgroup for each image to store its data and metadata
-            img_subgroup = f.create_group(f"Image_{enum_idx}")
-
-            # Store the image and mask with chunking and compression
-            img_subgroup.create_dataset("image", data=image,
-                                                 dtype = 'float32',
-                                                 chunks=(480, 480),)
-            img_subgroup.create_dataset("mask" , data=mask,
-                                                 dtype = 'int',
-                                                 chunks=(480, 480),
-                                                 compression="gzip",)
-
-            ## # Store bounding boxes as a variable-length dataset
-            ## bbox_dset = img_subgroup.create_dataset("bbox", data=bbox
-            ##                                                 dtype = 'float32',)
-
-            ## # Store metadata
-            ## serialized_meta = json.dumps(meta)
-            ## img_subgroup.attrs['metadata'] = serialized_meta
-        print(f"Exporting {path_h5} done.")
-
-
 def get_img(frame_idx, stream_peakdiff):
     return stream_peakdiff.stream_manager.get_img(frame_idx)
 
 
-def get_good_predicted_peaks(frame_idx, stream_peakdiff, sigma_cut = 1):
+def split_peaks_by_sigma(frame_idx, stream_peakdiff, sigma_cut = 1):
     '''
     [(y, x), (y, x), ...]
 
-    These peaks are worth of labeling.
+    Good peaks are worth of labeling.
     '''
-    return stream_peakdiff.stream_manager.get_predicted_peaks(frame_idx, sigma_cut)
+    return stream_peakdiff.stream_manager.split_peaks_by_sigma(frame_idx, sigma_cut)
+
+
+def get_detector_info(frame_idx, stream_peakdiff):
+    keys = ( 'photon_energy_eV',
+             'average_camera_length', )
+    metadata = stream_peakdiff.stream_manager.stream_data[frame_idx]['metadata']
+    return { k : metadata[k] for k in keys }
+
+
+def get_crystal_info(frame_idx, stream_peakdiff):
+    '''
+    There could be multiple crystals.
+    '''
+    keys = ( 'astar',
+             'bstar',
+             'cstar',
+             'lattice_type',
+             'centering',
+             'unique_axis', )
+    metadata_list = [ crystal['metadata'] for crystal in stream_peakdiff.stream_manager.stream_data[frame_idx]['crystal'] ]
+    return [ { k : metadata[k] for k in keys } for metadata in metadata_list]
 
 
 @dataclass
 class AppConfig:
+    identifier          : str
     path_csv            : str
     batch_size          : int
     max_concurrent_tasks: int
     max_nfev            : int
     sigma_cut           : float
+    redchi_cut          : float
     win_size            : int
     basename_h5         : str
     dir_h5              : str
@@ -176,11 +193,13 @@ def main():
         config_dict = yaml.safe_load(file)
     app_config = AppConfig(**config_dict)
 
+    identifier           = app_config.identifier
     path_csv             = app_config.path_csv
     batch_size           = app_config.batch_size
     max_concurrent_tasks = app_config.max_concurrent_tasks
     max_nfev             = app_config.max_nfev
     sigma_cut            = app_config.sigma_cut
+    redchi_cut           = app_config.redchi_cut
     win_size             = app_config.win_size
     basename_h5          = app_config.basename_h5
     dir_h5               = app_config.dir_h5
@@ -204,10 +223,12 @@ def main():
 
     # Save shared data into a ray object store...
     shared_data = {
+        'identifier'      : identifier,
         'basename_h5'     : basename_h5,
         'dir_h5'          : dir_h5,
         'max_nfev'        : max_nfev,
         'sigma_cut'       : sigma_cut,
+        'redchi_cut'      : redchi_cut,
         'win_size'        : win_size,
         'stream_peakdiff' : stream_peakdiff,
     }
