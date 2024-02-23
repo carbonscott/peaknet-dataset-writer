@@ -13,7 +13,7 @@
 #SBATCH --exclusive
 #SBATCH --nodes=4
 #SBATCH --ntasks-per-node=1   # One ray instance on a node
-#SBATCH --cpus-per-task=20
+#SBATCH --cpus-per-task=10
 
 cd /sdf/data/lcls/ds/prj/prjcwang31/results/proj.peaknet-10k
 

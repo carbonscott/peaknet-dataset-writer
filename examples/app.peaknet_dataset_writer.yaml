@@ -1,9 +1,11 @@
+identifier          : "mfx13016_0036"
 path_csv            : "peaknet10k.frame_idx.csv"
 batch_size          : 10
 max_concurrent_tasks: 4
 max_nfev            : 2000
 sigma_cut           : 0.2
+redchi_cut          : 1.0
 win_size            : 4
-basename_h5         : "mfx13016_0036.from_peaknet"
-dir_h5              : "peaknet-10k"
+basename_h5         : "mfx13016_0036"
+dir_h5              : "peaknet-10k.demo"
 path_peakdiff_config: "peakdiff_config.stream.yaml"
