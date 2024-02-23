@@ -1,3 +1,67 @@
+"""
+H5 format for PeakNet Dataset
+
+hdf5
+- shared_metadata, group
+  - pixel_maps, group
+    - pixel_map, link
+      - shape: (H, W, 3)
+      - Why 3?  It maps (y, x) to (x, y, z) in the detector space.
+    - pixel_map_1, dataset
+    - ...
+- data, group
+  - data_0, group
+    - image, dataset
+      - shape: (H, W)
+    - label, dataset
+      - shape: (H, W)
+    - good_peaks, dataset (or should I use groups???)
+      - shape: (N, 2)
+      - N means the number of peaks, it depends on the prerequisites.
+    - bad_peaks, dataset
+      - shape: (N, 2)
+      - N means the number of peaks, it depends on the prerequisites.
+    - bad_fit_init_values_list, group
+      - 0
+        - a
+        - amp
+        - b
+        - c
+        - cx
+        - cy
+        - eta
+        - gamma_x
+        - gamma_y
+        - sigma_x
+        - sigma_y
+      - ...
+    - bad_fit_final_values_list, group
+      - 0
+        - same as above
+      - ...
+    - bad_fit_context_list, dataset
+    - metadata, group
+      - identifier, dataset, e.g. mfx13016_0036
+      - detector, group
+        - name, dataset
+        - photon_energy, dataset
+        - average_camera_length, dataset
+      - pixel_map, group
+        - **link** to one of the shared pixel map
+      - crystals, group
+        - crystal_0, group
+          - astar
+          - bstar
+          - centering
+          - cstar
+          - lattice_type
+          - unique_axis
+      - sample, dataset
+  - data_1, group
+  - ...
+"""
+
+
 import numpy as np
 import h5py
 
