@@ -81,9 +81,9 @@ def write_results_to_h5(path_h5, inputs):
                 for k, v in item_dict.items():
                     group.create_dataset(k, data = v)
 
-            # [[[ Data ]]]
+            # [[[ Metadata ]]]
             # Create a subgroup for metadata...
-            metadata_subgroup = data_group.create_group(f"metadata_{enum_idx:04d}")
+            metadata_subgroup = data_subgroup.create_group("metadata")
 
             # Store unique identifier for an image...
             metadata_subgroup.create_dataset("identifier", data = identifier)
