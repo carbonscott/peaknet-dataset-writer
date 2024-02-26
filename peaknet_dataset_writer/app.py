@@ -213,6 +213,10 @@ def main():
             if line:
                 frame_idx_list.append(int(line[0].strip()))
 
+    # Remove redundancy in csv...
+    frame_idx_list = sorted(list(set(frame_idx_list)))
+    print(f"Processing {len(frame_idx_list)} frames.")
+
     # Retrieve data source from the peakdiff...
     with open(path_peakdiff_config, 'r') as file:
         peakdiff_config = yaml.safe_load(file)
