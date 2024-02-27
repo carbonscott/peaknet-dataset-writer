@@ -158,7 +158,7 @@ def write_results_to_h5(path_h5, inputs):
             metadata_subgroup.create_dataset("identifier", data = identifier)
 
             # Store unique psana_event_tuple...
-            psana_event_identifier = f"{exp}_r{run}_{psana_event_idx:06d}"
+            psana_event_identifier = f"{identifier}_{psana_event_idx:06d}" if exp is None else f"{exp}_r{run}_{psana_event_idx:06d}"
             metadata_subgroup.create_dataset("psana_event_identifier", data = psana_event_identifier)
 
             # Store detector info...
