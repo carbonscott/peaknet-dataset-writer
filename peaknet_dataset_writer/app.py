@@ -70,6 +70,7 @@ def process_event_batch(batch_idx, event_batch, shared_data_ref):
         # Obtain img and peaks...
         frame_idx             = event
         img                   = get_img(frame_idx, stream_peakdiff)
+        psana_event_tuple     = get_psana_event_tuple(frame_idx, stream_peakdiff)
         good_peaks, bad_peaks = split_peaks_by_sigma(frame_idx, stream_peakdiff, sigma_cut = sigma_cut)
 
         # Get a patch list for this event...
@@ -120,6 +121,7 @@ def process_event_batch(batch_idx, event_batch, shared_data_ref):
             'bad_fit_context_list'      : bad_fit_context_list,
             'bad_fit_init_values_list'  : bad_fit_init_values_list,
             'bad_fit_final_values_list' : bad_fit_final_values_list,
+            'psana_event_tuple'         : psana_event_tuple,
         }
         results.append(event_result)
 
@@ -133,6 +135,10 @@ def process_event_batch(batch_idx, event_batch, shared_data_ref):
 
 def get_img(frame_idx, stream_peakdiff):
     return stream_peakdiff.stream_manager.get_img(frame_idx)
+
+
+def get_psana_event_tuple(frame_idx, stream_peakdiff):
+    return stream_peakdiff.stream_manager.get_psana_event_tuple(frame_idx)
 
 
 def split_peaks_by_sigma(frame_idx, stream_peakdiff, sigma_cut = 1):

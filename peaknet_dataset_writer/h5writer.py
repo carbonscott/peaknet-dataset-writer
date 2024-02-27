@@ -42,6 +42,7 @@ hdf5
     - bad_fit_context_list, dataset
     - metadata, group
       - identifier, dataset, e.g. mfx13016_0036
+      - psana_event_idx, e.g. 14324
       - detector, group
         - name, dataset
         - photon_energy, dataset
@@ -96,10 +97,14 @@ def write_results_to_h5(path_h5, inputs):
             detector                  = input['detector'                 ]
             crystals                  = input['crystals'                 ]
             identifier                = input['identifier'               ]
+            psana_event_tuple         = input['psana_event_tuple'        ]
+
+            # Unpack the psana event tuple...
+            exp, run, psana_event_idx = psana_event_tuple
 
             # Obtain unique identifier...
             # Enforce the following format (exp, run)
-            uid = identifier
+            uid = identifier if exp is None else f"{exp}_r{run}"
             if not uid in uid_tracker: uid_tracker[uid] = {
                 "pixel_map" : None,
             }
@@ -149,8 +154,12 @@ def write_results_to_h5(path_h5, inputs):
             # Create a subgroup for metadata...
             metadata_subgroup = data_subgroup.create_group("metadata")
 
-            # Store unique identifier for an image...
+            # Store unique identifier for the associated experimental run...
             metadata_subgroup.create_dataset("identifier", data = identifier)
+
+            # Store unique psana_event_tuple...
+            psana_event_identifier = f"{exp}_r{run}_{psana_event_idx:06d}"
+            metadata_subgroup.create_dataset("psana_event_identifier", data = psana_event_identifier)
 
             # Store detector info...
             detector_subgroup = metadata_subgroup.create_group("detector")
