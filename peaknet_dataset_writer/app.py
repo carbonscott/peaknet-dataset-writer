@@ -16,7 +16,7 @@ from bragg_peak_fitter.engine                  import PeakFitter
 from bragg_peak_fitter.modeling.pseudo_voigt2d import PseudoVoigt2D
 
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from .h5writer import write_results_to_h5
 
@@ -80,30 +80,31 @@ def process_event_batch(batch_idx, event_batch, max_concurrent_subtasks, shared_
         peaks_x    = good_peaks[:, 1]
         patch_list = get_patch_list(peaks_y, peaks_x, img, win_size)
 
-        # Submit sub-events (peak fitting) elastically...
-        # ...Submit the init few processing tasks
-        sub_event_futures = []
-        sub_event_results = []
-        for _ in range(min(max_concurrent_subtasks, len(patch_list))):
-            patch = patch_list.pop(0)
-            future = process_sub_event.remote(patch, max_nfev)
-            sub_event_futures.append(future)
-
-        # ...Continuously submit new tasks once an old one is complete (elastic submission)
-        while patch_list or sub_event_futures:
-            # ...Wait for one batch to complete
-            done_futures, sub_event_futures = ray.wait(sub_event_futures, num_returns = 1)
-            complete_futures = ray.get(done_futures[0])
-            sub_event_results.append(complete_futures)
-
-            # ...More sub tasks to process???
-            if patch_list:
+        if max_concurrent_subtasks is None:
+            sub_event_futures = [ process_sub_event.remote(patch, max_nfev) for patch in patch_list ]
+            sub_event_results = ray.get(sub_event_futures)
+        else:
+            # Submit sub-events (peak fitting) elastically...
+            # ...Submit the init few processing tasks
+            sub_event_futures = []
+            sub_event_results = []
+            for _ in range(min(max_concurrent_subtasks, len(patch_list))):
                 patch = patch_list.pop(0)
                 future = process_sub_event.remote(patch, max_nfev)
                 sub_event_futures.append(future)
 
-        ## sub_event_futures = [ process_sub_event.remote(patch, max_nfev) for patch in patch_list ]
-        ## sub_event_results = ray.get(sub_event_futures)
+            # ...Continuously submit new tasks once an old one is complete (elastic submission)
+            while patch_list or sub_event_futures:
+                # ...Wait for one batch to complete
+                done_futures, sub_event_futures = ray.wait(sub_event_futures, num_returns = 1)
+                complete_futures = ray.get(done_futures[0])
+                sub_event_results.append(complete_futures)
+
+                # ...More sub tasks to process???
+                if patch_list:
+                    patch = patch_list.pop(0)
+                    future = process_sub_event.remote(patch, max_nfev)
+                    sub_event_futures.append(future)
 
         # Unpack the results of all sub events...
         mask_label_sub_events, fitting_result_sub_events = [ list(row) for row in zip(*sub_event_results) ]
@@ -205,7 +206,6 @@ class AppConfig:
     path_csv               : str
     batch_size             : int
     max_concurrent_tasks   : int
-    max_concurrent_subtasks: int
     max_nfev               : int
     sigma_cut              : float
     redchi_cut             : float
@@ -213,6 +213,7 @@ class AppConfig:
     basename_h5            : str
     dir_h5                 : str
     path_peakdiff_config   : str
+    max_concurrent_subtasks: Optional[int] = None
 
 def main():
     parser = argparse.ArgumentParser(description='Run the PeakNet Dataset Writer.')
