@@ -258,8 +258,8 @@ def main():
         peakdiff_config = yaml.safe_load(file)
 
     # For user-friendliness, always re-use cache...
-    peakdiff_config['stream_config'].ignores_cache = False
-    peakdiff_config.ignores_cache                  = False
+    peakdiff_config['stream_config']['ignores_cache'] = False
+    peakdiff_config['ignores_cache']                  = False
 
     # Configure peakdiff...
     stream_config          = StreamConfig(**peakdiff_config['stream_config'])
