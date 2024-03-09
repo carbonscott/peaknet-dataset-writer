@@ -256,6 +256,12 @@ def main():
     # Retrieve data source from the peakdiff...
     with open(path_peakdiff_config, 'r') as file:
         peakdiff_config = yaml.safe_load(file)
+
+    # For user-friendliness, always re-use cache...
+    peakdiff_config['stream_config'].ignores_cache = False
+    peakdiff_config.ignores_cache                  = False
+
+    # Configure peakdiff...
     stream_config          = StreamConfig(**peakdiff_config['stream_config'])
     dir_output             = peakdiff_config['dir_output']
     stream_peakdiff_config = StreamPeakDiffConfig(stream_config = stream_config, dir_output = dir_output)
