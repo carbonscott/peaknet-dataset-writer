@@ -48,7 +48,7 @@ def process_sub_event(patch, max_nfev = 2000):
 
 
 @ray.remote
-def process_event_batch(batch_idx, event_batch, shared_data_ref):
+def process_event_batch(batch_idx, event_batch, max_concurrent_subtasks, shared_data_ref):
     '''
     Each event corresponds to a frame idx.
 
@@ -80,9 +80,30 @@ def process_event_batch(batch_idx, event_batch, shared_data_ref):
         peaks_x    = good_peaks[:, 1]
         patch_list = get_patch_list(peaks_y, peaks_x, img, win_size)
 
-        # Submit sub-events (peak fitting)...
-        sub_event_futures = [ process_sub_event.remote(patch, max_nfev) for patch in patch_list ]
-        sub_event_results = ray.get(sub_event_futures)
+        # Submit sub-events (peak fitting) elastically...
+        # ...Submit the init few processing tasks
+        sub_event_futures = []
+        sub_event_results = []
+        for _ in range(min(max_concurrent_subtasks, len(patch_list))):
+            patch = patch_list.pop(0)
+            future = process_sub_event.remote(patch, max_nfev)
+            sub_event_futures.append(future)
+
+        # ...Continuously submit new tasks once an old one is complete (elastic submission)
+        while patch_list or sub_event_futures:
+            # ...Wait for one batch to complete
+            done_futures, sub_event_futures = ray.wait(sub_event_futures, num_returns = 1)
+            complete_futures = ray.get(done_futures[0])
+            sub_event_results.append(complete_futures)
+
+            # ...More sub tasks to process???
+            if patch_list:
+                patch = patch_list.pop(0)
+                future = process_sub_event.remote(patch, max_nfev)
+                sub_event_futures.append(future)
+
+        ## sub_event_futures = [ process_sub_event.remote(patch, max_nfev) for patch in patch_list ]
+        ## sub_event_results = ray.get(sub_event_futures)
 
         # Unpack the results of all sub events...
         mask_label_sub_events, fitting_result_sub_events = [ list(row) for row in zip(*sub_event_results) ]
@@ -180,17 +201,18 @@ def cache_pixel_maps(stream_peakdiff):
 
 @dataclass
 class AppConfig:
-    identifier          : str
-    path_csv            : str
-    batch_size          : int
-    max_concurrent_tasks: int
-    max_nfev            : int
-    sigma_cut           : float
-    redchi_cut          : float
-    win_size            : int
-    basename_h5         : str
-    dir_h5              : str
-    path_peakdiff_config: str
+    identifier             : str
+    path_csv               : str
+    batch_size             : int
+    max_concurrent_tasks   : int
+    max_concurrent_subtasks: int
+    max_nfev               : int
+    sigma_cut              : float
+    redchi_cut             : float
+    win_size               : int
+    basename_h5            : str
+    dir_h5                 : str
+    path_peakdiff_config   : str
 
 def main():
     parser = argparse.ArgumentParser(description='Run the PeakNet Dataset Writer.')
@@ -206,17 +228,18 @@ def main():
         config_dict = yaml.safe_load(file)
     app_config = AppConfig(**config_dict)
 
-    identifier           = app_config.identifier
-    path_csv             = app_config.path_csv
-    batch_size           = app_config.batch_size
-    max_concurrent_tasks = app_config.max_concurrent_tasks
-    max_nfev             = app_config.max_nfev
-    sigma_cut            = app_config.sigma_cut
-    redchi_cut           = app_config.redchi_cut
-    win_size             = app_config.win_size
-    basename_h5          = app_config.basename_h5
-    dir_h5               = app_config.dir_h5
-    path_peakdiff_config = app_config.path_peakdiff_config
+    identifier              = app_config.identifier
+    path_csv                = app_config.path_csv
+    batch_size              = app_config.batch_size
+    max_concurrent_tasks    = app_config.max_concurrent_tasks
+    max_concurrent_subtasks = app_config.max_concurrent_subtasks
+    max_nfev                = app_config.max_nfev
+    sigma_cut               = app_config.sigma_cut
+    redchi_cut              = app_config.redchi_cut
+    win_size                = app_config.win_size
+    basename_h5             = app_config.basename_h5
+    dir_h5                  = app_config.dir_h5
+    path_peakdiff_config    = app_config.path_peakdiff_config
 
     # Events to process...
     frame_idx_list = []
@@ -243,15 +266,15 @@ def main():
 
     # Save shared data into a ray object store...
     shared_data = {
-        'identifier'      : identifier,
-        'basename_h5'     : basename_h5,
-        'dir_h5'          : dir_h5,
-        'max_nfev'        : max_nfev,
-        'sigma_cut'       : sigma_cut,
-        'redchi_cut'      : redchi_cut,
-        'win_size'        : win_size,
-        'stream_peakdiff' : stream_peakdiff,
-        'pixel_map_cache' : pixel_map_cache,
+        'identifier'              : identifier,
+        'basename_h5'             : basename_h5,
+        'dir_h5'                  : dir_h5,
+        'max_nfev'                : max_nfev,
+        'sigma_cut'               : sigma_cut,
+        'redchi_cut'              : redchi_cut,
+        'win_size'                : win_size,
+        'stream_peakdiff'         : stream_peakdiff,
+        'pixel_map_cache'         : pixel_map_cache,
     }
     shared_data_ref = ray.put(shared_data)
 
@@ -269,7 +292,7 @@ def main():
         batch = event_batches.pop(0)
 
         # Submit this batch...
-        process_batch_idx_list.append(process_event_batch.remote(batch_idx, batch, shared_data_ref))
+        process_batch_idx_list.append(process_event_batch.remote(batch_idx, batch, max_concurrent_subtasks, shared_data_ref))
 
         # Update batch index...
         batch_idx += 1
@@ -284,7 +307,7 @@ def main():
         if event_batches:
             # Submit the batch now...
             batch = event_batches.pop(0)
-            process_batch_idx_list.append(process_event_batch.remote(batch_idx, batch, shared_data_ref))
+            process_batch_idx_list.append(process_event_batch.remote(batch_idx, batch, max_concurrent_subtasks, shared_data_ref))
             batch_idx += 1
 
     ray.shutdown()
