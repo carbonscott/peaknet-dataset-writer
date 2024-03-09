@@ -98,6 +98,7 @@ def write_results_to_h5(path_h5, inputs):
             crystals                  = input['crystals'                 ]
             identifier                = input['identifier'               ]
             psana_event_tuple         = input['psana_event_tuple'        ]
+            pixel_map                 = input['pixel_map'                ]
 
             # Unpack the psana event tuple...
             exp, run, psana_event_idx = psana_event_tuple
@@ -170,9 +171,9 @@ def write_results_to_h5(path_h5, inputs):
             # Store pixel map...
             key = "pixel_map"
             if uid_tracker[uid][key] is None:
-                pixel_map_data = -np.ones((H, W, 3), dtype = int)
-                uid_tracker[uid][key] = pixel_map_data
-                shared_pixel_maps.create_dataset(uid, data = pixel_map_data, compression = "gzip")
+            ##     pixel_map_data = -np.ones((H, W, 3), dtype = int)
+                uid_tracker[uid][key] = pixel_map
+                shared_pixel_maps.create_dataset(uid, data = pixel_map, compression = "gzip")
 
             metadata_subgroup[key] = h5py.SoftLink(f"/shared_metadata/pixel_maps/{uid}")
 

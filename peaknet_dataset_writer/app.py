@@ -63,6 +63,7 @@ def process_event_batch(batch_idx, event_batch, shared_data_ref):
     redchi_cut      = shared_data_ref['redchi_cut'     ]
     win_size        = shared_data_ref['win_size'       ]
     stream_peakdiff = shared_data_ref['stream_peakdiff']
+    pixel_map_cache = shared_data_ref['pixel_map_cache']
 
     results = []
     for event in event_batch:
@@ -122,6 +123,7 @@ def process_event_batch(batch_idx, event_batch, shared_data_ref):
             'bad_fit_init_values_list'  : bad_fit_init_values_list,
             'bad_fit_final_values_list' : bad_fit_final_values_list,
             'psana_event_tuple'         : psana_event_tuple,
+            'pixel_map'                 : pixel_map_cache.get(frame_idx, None)
         }
         results.append(event_result)
 
@@ -153,7 +155,7 @@ def split_peaks_by_sigma(frame_idx, stream_peakdiff, sigma_cut = 1):
 def get_detector_info(frame_idx, stream_peakdiff):
     keys = ( 'photon_energy_eV',
              'average_camera_length', )
-    metadata = stream_peakdiff.stream_manager.stream_data[frame_idx]['metadata']
+    metadata = stream_peakdiff.stream_manager.stream_data[frame_idx]['CHUNK_BLOCK']['metadata']
     return { k : metadata[k] for k in keys }
 
 
@@ -167,8 +169,13 @@ def get_crystal_info(frame_idx, stream_peakdiff):
              'lattice_type',
              'centering',
              'unique_axis', )
-    metadata_list = [ crystal['metadata'] for crystal in stream_peakdiff.stream_manager.stream_data[frame_idx]['crystal'] ]
+    metadata_list = [ crystal['metadata'] for crystal in stream_peakdiff.stream_manager.stream_data[frame_idx]['CHUNK_BLOCK']['crystal'] ]
     return [ { k : metadata[k] for k in keys } for metadata in metadata_list]
+
+
+def cache_pixel_maps(stream_peakdiff):
+    print('Caching pixel maps...')
+    return stream_peakdiff.stream_manager.cache_pixel_maps()
 
 
 @dataclass
@@ -231,6 +238,9 @@ def main():
     stream_peakdiff_config = StreamPeakDiffConfig(stream_config = stream_config, dir_output = dir_output)
     stream_peakdiff        = StreamPeakDiff(stream_peakdiff_config)
 
+    # Precompute pixel map for this stream...
+    pixel_map_cache = cache_pixel_maps(stream_peakdiff)
+
     # Save shared data into a ray object store...
     shared_data = {
         'identifier'      : identifier,
@@ -241,6 +251,7 @@ def main():
         'redchi_cut'      : redchi_cut,
         'win_size'        : win_size,
         'stream_peakdiff' : stream_peakdiff,
+        'pixel_map_cache' : pixel_map_cache,
     }
     shared_data_ref = ray.put(shared_data)
 
