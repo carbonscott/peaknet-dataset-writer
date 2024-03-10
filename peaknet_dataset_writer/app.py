@@ -214,6 +214,7 @@ class AppConfig:
     dir_h5                 : str
     path_peakdiff_config   : str
     max_concurrent_subtasks: Optional[int] = None
+    start_batch_idx        : Optional[int] = None
 
 def main():
     parser = argparse.ArgumentParser(description='Run the PeakNet Dataset Writer.')
@@ -241,6 +242,7 @@ def main():
     basename_h5             = app_config.basename_h5
     dir_h5                  = app_config.dir_h5
     path_peakdiff_config    = app_config.path_peakdiff_config
+    start_batch_idx         = app_config.start_batch_idx
 
     # Events to process...
     frame_idx_list = []
@@ -291,9 +293,14 @@ def main():
     event_batches = [frame_idx_list[i:min(i + batch_size, num_events)] for i in range(0, num_events, batch_size)]
 
     # [[[ Elastic task scheduling ]]]
+    # Skip until the start batch idx...
+    batch_idx = 0
+    if start_batch_idx is not None:
+        event_batches = event_batches[start_batch_idx:]
+        batch_idx     = start_batch_idx
+
     # Submit the init few batch processing tasks...
     process_batch_idx_list = []   # Python list as a queue (fetch data with .pop)
-    batch_idx = 0
     for _ in range(min(max_concurrent_tasks, len(event_batches))):
         # Get a batch from the batch queue...
         batch = event_batches.pop(0)
