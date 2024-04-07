@@ -18,7 +18,7 @@ from bragg_peak_fitter.modeling.pseudo_voigt2d import PseudoVoigt2D
 from dataclasses import dataclass
 from typing import List, Optional
 
-from .h5writer import write_results_to_h5
+from .h5writer_v2 import write_results_to_h5
 
 @ray.remote
 def process_sub_event(patch, max_nfev = 2000):
