@@ -21,7 +21,7 @@ setuptools.setup(
     ],
     entry_points = {
         'console_scripts' : [
-            'peaknet-dataset-writer=peaknet_dataset_writer.app:main',
+            'peaknet-dataset-writer=peaknet_dataset_writer.zarr_app:main',
         ],
     },
     python_requires='>=3.6',
