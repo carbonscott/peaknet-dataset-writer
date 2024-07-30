@@ -94,7 +94,7 @@ def write_results_to_zarr(path_zarr, inputs):
             # Conditional modification of metadata
             psana_event_identifier = f"{identifier}_{psana_event_idx:06d}" if exp is None else f"{exp}_r{run}_{psana_event_idx:06d}"
             metadata_items = dict(
-                good_peaks                = good_peaks.tolist() if isinstance(good_peaks, np.ndarray) else good_peaks,
+                good_peaks                = good_peaks,
                 bad_peaks                 = bad_peaks,
                 bad_fit_context_list      = bad_fit_context_list,
                 bad_fit_init_values_list  = bad_fit_init_values_list,

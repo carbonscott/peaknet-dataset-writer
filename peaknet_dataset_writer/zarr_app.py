@@ -79,10 +79,12 @@ def process_event_batch(batch_idx, event_batch, max_concurrent_subtasks, shared_
             continue
 
         # Get a patch list for this event...
-        good_peaks = np.array(good_peaks)
-        peaks_y    = good_peaks[:, 0]
-        peaks_x    = good_peaks[:, 1]
-        patch_list = get_patch_list(peaks_y, peaks_x, img, win_size)
+        ## good_peaks = np.array(good_peaks)
+        ## peaks_y    = good_peaks[:, 0]
+        ## peaks_x    = good_peaks[:, 1]
+        peaks_y = [y for y, x in good_peaks]
+        peaks_x = [x for y, x in good_peaks]
+        patch_list = get_patch_list(peaks_y, peaks_x, img, win_size, applies_norm = True, uses_padding = True)
 
         if max_concurrent_subtasks is None:
             sub_event_futures = [ process_sub_event.remote(patch, max_nfev) for patch in patch_list ]
@@ -114,7 +116,7 @@ def process_event_batch(batch_idx, event_batch, max_concurrent_subtasks, shared_
         mask_label_sub_events, fitting_result_sub_events = [ list(row) for row in zip(*sub_event_results) ]
 
         # Prepare the mask...
-        mask = np.zeros_like(img, dtype = bool)
+        mask = np.zeros_like(img, dtype = int)
         mask_patch_list = get_patch_list(peaks_y, peaks_x, mask, win_size)
 
         # Assign labeled patches to mask patches...
@@ -128,9 +130,9 @@ def process_event_batch(batch_idx, event_batch, max_concurrent_subtasks, shared_
         bad_fit_final_values_list = []
         bad_fit_idx_list          = [ idx for idx, result in enumerate(fitting_result_sub_events) if result.redchi > redchi_cut ]
         for i in bad_fit_idx_list:
-            context      = (peaks_y[i], peaks_x[i], win_size)
-            init_values  = fitting_result_sub_events[i].init_values
-            final_values = fitting_result_sub_events[i].params.valuesdict()
+            context      = tuple(str(v) for v in [peaks_y[i], peaks_x[i], win_size])
+            init_values  = {k:str(v) for k, v in fitting_result_sub_events[i].init_values.items()}
+            final_values = {k:str(v) for k, v in fitting_result_sub_events[i].params.valuesdict().items()}
 
             bad_fit_context_list.append(context)
             bad_fit_init_values_list.append(init_values)

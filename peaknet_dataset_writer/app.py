@@ -78,7 +78,7 @@ def process_event_batch(batch_idx, event_batch, max_concurrent_subtasks, shared_
         good_peaks = np.array(good_peaks)
         peaks_y    = good_peaks[:, 0]
         peaks_x    = good_peaks[:, 1]
-        patch_list = get_patch_list(peaks_y, peaks_x, img, win_size)
+        patch_list = get_patch_list(peaks_y, peaks_x, img, win_size, applies_norm = True, uses_padding = True)
 
         if max_concurrent_subtasks is None:
             sub_event_futures = [ process_sub_event.remote(patch, max_nfev) for patch in patch_list ]
