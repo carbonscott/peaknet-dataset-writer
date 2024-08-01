@@ -79,9 +79,6 @@ def process_event_batch(batch_idx, event_batch, max_concurrent_subtasks, shared_
             continue
 
         # Get a patch list for this event...
-        ## good_peaks = np.array(good_peaks)
-        ## peaks_y    = good_peaks[:, 0]
-        ## peaks_x    = good_peaks[:, 1]
         peaks_y = [y for y, x in good_peaks]
         peaks_x = [x for y, x in good_peaks]
         patch_list = get_patch_list(peaks_y, peaks_x, img, win_size, applies_norm = True, uses_padding = True)
@@ -123,6 +120,14 @@ def process_event_batch(batch_idx, event_batch, max_concurrent_subtasks, shared_
         for mask_label, mask_patch in zip(mask_label_sub_events, mask_patch_list):
             mask_patch[:] = mask_label[:]
 
+        # Assemble image and label
+        pixel_maps = pixel_map_cache.get(frame_idx, None)
+        img  = image_to_detector(img , pixel_maps)
+        mask = image_to_detector(mask, pixel_maps)
+
+        # Reverse the pixel maps
+        pixel_maps = reverse_pixel_maps(pixel_maps)
+
         # [[[ AGGREGATE INFORMATION FOR EXPORT ]]]
         # Find out bad fit...
         bad_fit_context_list      = []
@@ -151,7 +156,7 @@ def process_event_batch(batch_idx, event_batch, max_concurrent_subtasks, shared_
             'bad_fit_init_values_list'  : bad_fit_init_values_list,
             'bad_fit_final_values_list' : bad_fit_final_values_list,
             'psana_event_tuple'         : psana_event_tuple,
-            'pixel_map'                 : pixel_map_cache.get(frame_idx, None)
+            'pixel_map'                 : pixel_maps,
         }
         results.append(event_result)
 
@@ -205,6 +210,43 @@ def get_crystal_info(frame_idx, stream_peakdiff):
 def cache_pixel_maps(stream_peakdiff):
     print('Caching pixel maps...')
     return stream_peakdiff.stream_manager.cache_pixel_maps()
+
+
+def reverse_pixel_maps(pixel_maps):
+    """ From detector to cheetah tile """
+    pixel_map_x, pixel_map_y, pixel_map_z = pixel_maps
+
+    pixel_map_x = np.round(pixel_map_x).astype(int)
+    pixel_map_y = np.round(pixel_map_y).astype(int)
+    H = pixel_map_x.max() - pixel_map_x.min() + 1
+    W = pixel_map_y.max() - pixel_map_y.min() + 1
+    detector_shape = (H, W)
+
+    reverse_pixel_map_x = np.zeros(detector_shape).astype(int)
+    reverse_pixel_map_y = np.zeros(detector_shape).astype(int)
+
+    x_range = np.arange(0, H)
+    y_range = np.arange(0, W)
+    x_coords, y_coords = np.meshgrid(x_range, y_range, indexing='ij')
+    reverse_pixel_map_x[pixel_map_x, pixel_map_y] = x_coords
+    reverse_pixel_map_y[pixel_map_x, pixel_map_y] = y_coords
+
+    return reverse_pixel_map_x, reverse_pixel_map_y
+
+
+def image_to_detector(image, pixel_maps):
+    pixel_map_x, pixel_map_y, pixel_map_z = pixel_maps
+
+    pixel_map_x = np.round(pixel_map_x).astype(int)
+    pixel_map_y = np.round(pixel_map_y).astype(int)
+    pixel_map_z = np.round(pixel_map_z).astype(int)
+    detector_image = np.zeros((pixel_map_x.max() - pixel_map_x.min() + 1,
+                               pixel_map_y.max() - pixel_map_y.min() + 1,
+                               pixel_map_z.max() - pixel_map_z.min() + 1), dtype = float)
+    detector_image[pixel_map_x, pixel_map_y, pixel_map_z] = image
+    detector_image = detector_image.transpose((2, 0, 1))    # (H, W, C=1) -> (C, H, W)
+
+    return detector_image[0]
 
 
 @dataclass

@@ -5,6 +5,9 @@ ZARR data model for PeakNet Dataset
 - target, tensor
 - pixel_map, groups with soft link
 - metadata (JSON attribute for each input)
+
+Input and target are assembled by the geometry.  pixel_map maps detector
+coordinates to cheetah tile coordinates.
 """
 
 
