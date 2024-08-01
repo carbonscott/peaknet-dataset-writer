@@ -214,22 +214,28 @@ def cache_pixel_maps(stream_peakdiff):
 
 def reverse_pixel_maps(pixel_maps):
     """ From detector to cheetah tile """
+    # Unpack pixel map (cheetah to detector)
     pixel_map_x, pixel_map_y, pixel_map_z = pixel_maps
 
+    # Build meshgrids for each pixel map for reverse mapping
+    H_orig, W_orig = pixel_map_x.shape
+    x_range_orig = np.arange(0, H_orig)
+    y_range_orig = np.arange(0, W_orig)
+    x_coords_orig, y_coords_orig = np.meshgrid(x_range_orig, y_range_orig, indexing='ij')
+
+    # Imply detector shape
     pixel_map_x = np.round(pixel_map_x).astype(int)
     pixel_map_y = np.round(pixel_map_y).astype(int)
     H = pixel_map_x.max() - pixel_map_x.min() + 1
     W = pixel_map_y.max() - pixel_map_y.min() + 1
     detector_shape = (H, W)
 
+    # Build an init reverse pixel map
     reverse_pixel_map_x = np.zeros(detector_shape).astype(int)
     reverse_pixel_map_y = np.zeros(detector_shape).astype(int)
 
-    x_range = np.arange(0, H)
-    y_range = np.arange(0, W)
-    x_coords, y_coords = np.meshgrid(x_range, y_range, indexing='ij')
-    reverse_pixel_map_x[pixel_map_x, pixel_map_y] = x_coords
-    reverse_pixel_map_y[pixel_map_x, pixel_map_y] = y_coords
+    reverse_pixel_map_x[pixel_map_x, pixel_map_y] = x_coords_orig
+    reverse_pixel_map_y[pixel_map_x, pixel_map_y] = y_coords_orig
 
     return reverse_pixel_map_x, reverse_pixel_map_y
 
